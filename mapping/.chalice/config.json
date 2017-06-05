@@ -3,7 +3,15 @@
   "app_name": "mapping",
   "stages": {
     "dev": {
-      "api_gateway_stage": "dev"
+      "api_gateway_stage": "dev",
+      "environment_variables": {
+          "posturl": "https://65z88jvqg8.execute-api.eu-west-1.amazonaws.com/dev/postdata",
+          "geturl": "https://65z88jvqg8.execute-api.eu-west-1.amazonaws.com/dev/getdata",
+          "imageurl": "https://s3-eu-west-1.amazonaws.com/emergis-pub",
+          "bucket": "emergis",
+          "emailbucket": "emergis-email",
+          "ddbtable": "emergis"
+      }
     }
   }
 }

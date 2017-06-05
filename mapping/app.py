@@ -12,15 +12,6 @@ app = Chalice(app_name='mapping')
 S3_CLIENT = boto3.client('s3', region_name="eu-west-1")
 DDB_CLIENT = boto3.client('dynamodb')
 
-POST_URL = os.environ['posturl']
-GET_URL = os.environ['geturl']
-IMAGE_URL = os.environ['imageurl']
-
-S3_BUCKET = os.environ['posturl']
-S3_EMAIL_BUCKET = os.environ['emailbucket']
- 
-DDB_TABLE = os.environ['ddbtable']
-
 
 def render_s3_template(client, bucket, template_name, content=None):
     # If no conent is supplied, set to empty dict
@@ -36,16 +27,18 @@ def render_s3_template(client, bucket, template_name, content=None):
 
 @app.route('/')
 def index():
-    post_url = POST_URL
-    get_url = GET_URL
-    image_url = IMAGE_URL
-
-    template_data = {"postURL" : post_url,
+    try:
+        # Get Lambda env vars
+        post_url = os.environ['posturl']
+        get_url = os.environ['geturl']
+        image_url = os.environ['imageurl']
+        s3_bucket = os.environ['bucket']
+ 
+        template_data = {"postURL" : post_url,
                      "getURL" : get_url,
                      "imagesURL": image_url}
 
-    try:
-        html_content = render_s3_template(S3_CLIENT, S3_BUCKET, "mapbox.j2", template_data)
+        html_content = render_s3_template(S3_CLIENT, s3_bucket, "mapbox.j2", template_data)
 
         return Response(body=html_content,
                         status_code=200,
@@ -54,7 +47,7 @@ def index():
                                  'Set-Cookie': 'token1=data1',
                                  'Set-cookie': 'token2=data2'})
     except:
-        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=S3_BUCKET, Key="index_error.txt")
+        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=s3_bucket, Key="index_error.txt")
         return Response(body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]),
                         status_code=500,
                         headers={'Content-Type': 'text/html'})
@@ -62,10 +55,13 @@ def index():
 
 @app.route('/getdata')
 def getdata():
+    ddb_table = os.environ['ddbtable']
+    s3_bucket = os.environ['bucket']
+
     try:
         map_data = dict()
 
-        response = DDB_CLIENT.scan(TableName=DDB_TABLE)
+        response = DDB_CLIENT.scan(TableName=ddb_table)
         for item in response['Items']:
             id = item['id']['S'] 
             type = item['type']['S'] 
@@ -87,7 +83,7 @@ def getdata():
                                  'Access-Control-Allow-Origin': '*'})
 
     except:
-        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=S3_BUCKET, Key="getdata_error.txt")
+        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=s3_bucket, Key="getdata_error.txt")
         return Response(body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]),
                         status_code=500,
                         headers={'Content-Type': 'text/plain'})
@@ -95,6 +91,9 @@ def getdata():
 
 @app.route('/postdata', methods=['POST'])
 def postdata():
+    ddb_table = os.environ['ddbtable']
+    s3_bucket = os.environ['bucket']
+
     try:
         json_data = {}
         json_data['input'] = app.current_request.json_body
@@ -109,11 +108,11 @@ def postdata():
 
         
         if action == "create" or action == "edit":
-            DDB_CLIENT.put_item(TableName=DDB_TABLE, 
+            DDB_CLIENT.put_item(TableName=ddb_table, 
                                 Item=db_item)
 
         elif action == "delete":
-            DDB_CLIENT.delete_item(TableName=DDB_TABLE, 
+            DDB_CLIENT.delete_item(TableName=ddb_table, 
                                    Key={'id': {'S': db_item['id']['S']}})
 
         return Response(body="success",
@@ -121,7 +120,7 @@ def postdata():
                         headers={'Content-Type': 'text/plain'})
 
     except:
-        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=S3_BUCKET, Key="postdata_error.txt")
+        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=s3_bucket, Key="postdata_error.txt")
         return Response(body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]),
                         status_code=500,
                         headers={'Content-Type': 'text/plain'})
@@ -129,6 +128,10 @@ def postdata():
 
 @app.route('/emaildata', methods=['POST'])
 def emaildata():
+    ddb_table = os.environ['ddbtable']
+    s3_bucket = os.environ['bucket']
+    s3_email_bucket = os.environ['emailbucket']
+
     try:
         json_data = {}
         json_data['input'] = app.current_request.json_body
@@ -144,9 +147,9 @@ def emaildata():
             db_item['action'] = {'S': json_data['input'][message]['action']}
             db_item['data'] = {'S': json.dumps(geo_data)}
 
-            DDB_CLIENT.put_item(TableName=DDB_TABLE, Item=db_item)
+            DDB_CLIENT.put_item(TableName=ddb_table, Item=db_item)
 
-            S3_CLIENT.delete_object(Bucket=S3_EMAIL_BUCKET, Key=message)
+            S3_CLIENT.delete_object(Bucket=s3_email_bucket, Key=message)
 
         return Response(body="success",
                         status_code=200,
@@ -154,7 +157,7 @@ def emaildata():
 
 
     except:
-        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=S3_BUCKET, Key="emaildata_error.txt")
+        S3_CLIENT.put_object(Body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]), Bucket=s3_bucket, Key="emaildata_error.txt")
         return Response(body=str(sys.exc_info()[0]) + " -- " + str(sys.exc_info()[1]),
                         status_code=500,
                         headers={'Content-Type': 'text/plain'})
