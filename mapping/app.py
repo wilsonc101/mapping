@@ -12,9 +12,9 @@ app = Chalice(app_name='mapping')
 S3_CLIENT = boto3.client('s3', region_name="eu-west-1")
 DDB_CLIENT = boto3.client('dynamodb')
 
-POST_URL = str(os.environ['posturl']) + "/dev/postdata"
-GET_URL = str(os.environ['geturl']) + "/dev/getdata"
-IMAGE_URL = str(os.environ['imageurl']) + "/dev/maildata"
+POST_URL = os.environ['posturl']
+GET_URL = os.environ['geturl']
+IMAGE_URL = os.environ['imageurl']
 
 S3_BUCKET = os.environ['posturl']
 S3_EMAIL_BUCKET = os.environ['emailbucket']
