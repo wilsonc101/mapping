@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <title>Leaflet</title>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.0.3/dist/leaflet.css"
+   integrity="sha512-07I2e+7D8p6he1SIM+1twR5TIrhUQn9+I6yjqD53JQjFiMf8EtC93ty0/5vJTZGF8aAocvHYNEDJajGdNx1IsQ=="
+   crossorigin=""/>
+
+  <script src="https://unpkg.com/leaflet@1.0.3/dist/leaflet.js"
+   integrity="sha512-A7vV8IFfih/D732iSSKi20u/ooOfj/AGehOKq0f4vLT1Zr2Y+RX7C+w8A1gaSasGtRUZpF/NZgzSAu4/Gc41Lg=="
+   crossorigin=""></script>
+
+  <script src="https://unpkg.com/leaflet-draw@0.4.9/dist/leaflet.draw.js"
+   crossorigin=""></script>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@0.4.9/dist/leaflet.draw.css"
+   crossorigin=""/>
+
+  <link rel="stylesheet" href="https://ppete2.github.io/Leaflet.PolylineMeasure/Leaflet.PolylineMeasure.css" />
+  <script src="https://ppete2.github.io/Leaflet.PolylineMeasure/Leaflet.PolylineMeasure.js"></script>
+      
+<script type='text/javascript'>//<![CDATA[
+	window.onload=function(){
+	
+	
+	var postURL = "{{ postURL }}",
+	    getURL = "{{ getURL }}";
+	
+	function generateUUID(){
+	    var d = new Date().getTime();
+	    var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+	        var r = (d + Math.random()*16)%16 | 0;
+	        d = Math.floor(d/16);
+	        return (c=='x' ? r : (r&0x3|0x8)).toString(16);
+	    });
+	    return uuid;
+	}
+
+        var redIcon = new L.Icon({
+            iconUrl: '{{ imagesURL }}/marker-icon-2x-red.png',
+            shadowUrl: '{{ imagesURL }}/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]});
+
+        var orangeIcon = new L.Icon({
+            iconUrl: '{{ imagesURL }}/marker-icon-2x-orange.png',
+            shadowUrl: '{{ imagesURL }}/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]});
+
+
+	function httpPOST(action, type, id, data){
+	    var xhttp = new XMLHttpRequest();
+	    xhttp.open("POST", postURL, true);
+	    xhttp.setRequestHeader('Content-type', 'application/json');
+	    xhttp.send(JSON.stringify({"id": id, "action": action, "type": type, "data": data}));
+	}
+	
+	function HTTPListener () {
+	    var raw_response = this.responseText,
+	        response = JSON.parse(raw_response);
+	
+	    drawnItems.clearLayers();
+	
+	    for (var object in response) {
+	        var obj_id = object,
+	            obj_type = response[object]['type'];
+                    obj_action = response[object]['action'];
+	
+	        // Re-add objects to map
+	        // Marker
+	        if (obj_type == "marker") {
+	            var obj_lon = response[object]['coordinates'][0],
+	                obj_lat = response[object]['coordinates'][1];
+	        
+                    var popup_text = "ID: " + obj_id +
+                                     "<br>Lat: " + obj_lat +
+                                     "<br>Long: " + obj_lat
+
+                    if (obj_action == "alert") {
+                        var marker = L.marker([obj_lat,obj_lon], {title: obj_id, icon: redIcon}).bindPopup(popup_text);
+                    } else if (obj_action == "warn") {
+                        var marker = L.marker([obj_lat,obj_lon], {title: obj_id, icon: orangeIcon}).bindPopup(popup_text);
+                    } else {
+                        var marker = L.marker([obj_lat,obj_lon], {title: obj_id}).bindPopup(popup_text);
+                    };
+
+	            marker._leaflet_id = obj_id;
+	            marker._draw_type = obj_type;
+	            drawnItems.addLayer(marker);
+	
+	        // Circle
+	        } else if (obj_type == "circle") {
+	            var obj_lon = response[object]['coordinates'][0],
+	                obj_lat = response[object]['coordinates'][1],
+	                obj_radius = response[object]['radius'];
+	        
+	            var circle = L.circle([obj_lat,obj_lon], obj_radius);
+	            circle._leaflet_id = obj_id;
+	            circle._draw_type = obj_type;
+	            drawnItems.addLayer(circle);
+	            
+	       
+	        // Rectangle
+	        } else if (obj_type == "rectangle") {
+	            var coordinates = response[object]['coordinates'][0],
+	                corrected_coordinates = [];
+	                
+	            for (var latlng in coordinates) {
+	                var lon = coordinates[latlng][0],
+	                    lat = coordinates[latlng][1];
+	                    
+	                corrected_coordinates.push([lat, lon]);
+	            };  
+	
+	            var rectangle = L.rectangle(corrected_coordinates);
+	            rectangle._leaflet_id = obj_id;
+	            rectangle._draw_type = obj_type;
+	            drawnItems.addLayer(rectangle); 
+	                   
+	        // Polyline
+	        } else if (obj_type == "polyline") {
+	            var coordinates = response[object]['coordinates'],
+	                corrected_coordinates = [];
+	
+	            for (var latlng in coordinates) {
+	                var lon = coordinates[latlng][0],
+	                    lat = coordinates[latlng][1];
+	                    
+	                corrected_coordinates.push([lat, lon]);
+	            };  
+	                
+	            var polyline = L.polyline(corrected_coordinates);
+	            polyline._leaflet_id = obj_id;
+	            polyline._draw_type = obj_type;
+	            drawnItems.addLayer(polyline);
+	            
+	        // Polygon
+	        } else if (obj_type == "polygon") {
+	            var coordinates = response[object]['coordinates'][0],
+	                corrected_coordinates = [];
+	                
+	            for (var latlng in coordinates) {
+	                var lon = coordinates[latlng][0],
+	                    lat = coordinates[latlng][1];
+	                    
+	                corrected_coordinates.push([lat, lon]);
+	            };  
+	
+	            var polygon = L.polygon(corrected_coordinates);
+	            polygon._leaflet_id = obj_id;
+	            polygon._draw_type = obj_type;
+	            drawnItems.addLayer(polygon);
+	       }; 
+	    };
+	}
+	
+	function httpGET(){
+	    var xhttp = new XMLHttpRequest();
+	    xhttp.addEventListener("load", HTTPListener);
+	    xhttp.open("GET", getURL);
+	    xhttp.send();
+	}
+	
+	
+	// Add OSM tile layer (attrib)
+        var streets =  L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+                                    attribution: 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a>',
+                                    maxZoom: 18,
+                                    id: 'streets-v9',
+                                    accessToken: 'pk.eyJ1Ijoicm9ib3Rpa2EiLCJhIjoiY2ozMXF5bDI4MDAwMDJxbndsOGkwdXBhcyJ9.xwwskRXRacVuLllzI_tqoQ'
+                                   });
+
+        var sat =  L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+                                    attribution: 'Map data &copy; <a href="http://openstreetmap.org">OpenStreetMap</a>',
+                                    maxZoom: 18,
+                                    id: 'satellite-streets-v9',
+                                    accessToken: 'pk.eyJ1Ijoicm9ib3Rpa2EiLCJhIjoiY2ozMXF5bDI4MDAwMDJxbndsOGkwdXBhcyJ9.xwwskRXRacVuLllzI_tqoQ'
+                                   });
+
+
+
+	var map = L.map('map', {center: [51.44667890937984, -2.1424198150634766], 
+	                        zoom: 16}).addLayer(streets);
+	
+	// Create layer menu and assign to map
+	var baseLayers = {"Streets": streets,
+                          "Satellite": sat};
+	
+	L.control.layers(baseLayers).addTo(map);
+        L.control.polylineMeasure({"showMeasurementsClearControl": "true"}).addTo(map);	
+	
+	// Initialise the FeatureGroup to store editable layers
+	var drawnItems = new L.FeatureGroup();
+	map.addLayer(drawnItems);
+	
+	// Initialise the draw control and pass it the FeatureGroup of editable layers
+	var drawControl = new L.Control.Draw({
+	    edit: {
+	        featureGroup: drawnItems
+	    }
+	});
+	map.addControl(drawControl);
+	
+	
+	// Initial and Timed get - 5s
+	httpGET();
+	var timer = setInterval(httpGET, 5000);
+	
+	
+	map.on('draw:created', function (e) {
+	    var type = e.layerType,
+	        layer = e.layer,
+	        geo_data = layer.toGeoJSON();
+	
+	    layer._leaflet_id = generateUUID();
+	    layer._draw_type = type;
+	    
+	    if (type == "circle") {
+	        geo_data['radius'] = layer.getRadius();    
+	    };
+	   
+	    httpPOST("create", type, layer._leaflet_id, JSON.stringify(geo_data));
+	    
+	    drawnItems.addLayer(layer);
+	});
+	
+	map.on('draw:deleted', function (e) {
+	    var layergroup = e.layers;
+	
+	    layergroup.eachLayer(function (layer) {
+	        httpPOST("delete", "None", layer._leaflet_id, JSON.stringify(layer.toGeoJSON()));
+	    });   
+	
+	});
+	
+	map.on('draw:edited', function (e) {
+	    var layergroup = e.layers;
+	
+	    layergroup.eachLayer(function (layer) {
+	        var geo_data = layer.toGeoJSON(),
+	            type = layer._draw_type;
+           
+	        if (type == "circle") {
+	            geo_data['radius'] = layer._mRadius;
+	        };
+
+	        httpPOST("edit", type, layer._leaflet_id, JSON.stringify(geo_data));
+	    });   
+	
+	});
+	
+	
+	// Pause/resume timer during interaction
+	map.on('draw:drawstart', function (e) {
+	    clearTimeout(timer);
+	});
+	
+	map.on('draw:drawstop', function (e) {
+	    timer = setInterval(httpGET, 5000);
+	});
+		
+	map.on('draw:editstart', function (e) {
+	    clearTimeout(timer);
+	});
+	
+	map.on('draw:editstop', function (e) {
+	    timer = setInterval(httpGET, 5000);
+	});
+	
+	map.on('draw:deletestart', function (e) {
+	    clearTimeout(timer);
+	});
+	
+	map.on('draw:deletestop', function (e) {
+	    timer = setInterval(httpGET, 5000);
+	});
+
+
+
+}//]]> 
+
+</script>
+
+  <style type='text/css'>
+    html, body, #map {
+    width:100%;
+    height:100%;
+    margin:0;
+    padding:0;}
+
+   .get-markers {
+     width:100%;
+     margin:10px 0;}
+
+
+
+    .leaflet-draw-toolbar a {
+        background-image: url('{{ imagesURL }}/spritesheet.png');
+        background-image: linear-gradient(transparent, transparent), url('{{ imagesURL }}/spritesheet.svg');
+        background-repeat: no-repeat;
+        background-size: 270px 30px;
+        background-clip: padding-box;}
+
+    .leaflet-retina .leaflet-draw-toolbar a {
+        background-image: url('{{ imagesURL }}/spritesheet-2x.png');
+        background-image: linear-gradient(transparent, transparent), url('{{ imagesURL }}/spritesheet.svg');}
+
+    .leaflet-control-layers-toggle {
+        background-image: url('{{ imagesURL }}/layers.png');
+        width: 36px;
+        height: 36px;}
+
+    .leaflet-retina .leaflet-control-layers-toggle {
+        background-image: url('{{ imagesURL }}/layers-2x.png');
+        background-size: 26px 26px;}
+
+    .leaflet-default-icon-path {
+        background-image: url('{{ imagesURL }}/marker-icon.png');}
+
+  </style>
+  
+
+</head>
+<body>
+<div id="map" data-mode="">
+    <input type="hidden" data-map-markers="" value="" name="map-geojson-data" />
+</div>
+
+  
+</body>
+
+</html>
+
+
+
